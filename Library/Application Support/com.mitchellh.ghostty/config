@@ -1,0 +1,6 @@
+mouse-shift-capture = true
+theme = Builtin Tango Dark 
+cursor-click-to-move = true
+#background-opacity = 0.5 
+#background-blur-radius = 20
+macos-titlebar-style = tabs

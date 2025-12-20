@@ -72,7 +72,7 @@
   },
   "theme": {
     "mode": "dark",
-    "light": "Vercel Light",
+    "light": "Catppuccin Latte (Blur)",
     "dark": "Vercel Dark",
   },
   "file_scan_inclusions": ["input.txt", "output.txt"],
@@ -85,6 +85,7 @@
   },
   "buffer_font_size": 13.0,
   "terminal": {
+    "font_family": "Google Sans Code",
     "dock": "bottom",
     "line_height": "standard",
   },
@@ -107,14 +108,15 @@
     },
     "Typst": {
       "show_edit_predictions": false,
-      "language_servers": ["typst-languagetool"],
     },
     "C++": {
       "show_edit_predictions": false,
     },
-    "Python": {
-      // "language_servers": ["ty", "ruff"]
-    },
+        "Python": {
+          "language_servers": [
+              "ty", "ruff", "!basedpyright", "!pyrefly", "!pyright", "!pylsp"
+          ]
+        }
   },
   "agent": {
     "notify_when_agent_waiting": "all_screens",
@@ -180,14 +182,14 @@
     },
     "inline_assistant_model": {
       "provider": "copilot_chat",
-      "model": "gpt-4.1",
+      "model": "gpt-5-mini",
     },
     "always_allow_tool_actions": true,
     "default_profile": "write",
     "dock": "right",
     "default_model": {
       "provider": "copilot_chat",
-      "model": "claude-sonnet-4.5",
+      "model": "grok-code-fast-1",
     },
   },
   "edit_predictions": {
@@ -199,5 +201,6 @@
   },
   "show_edit_predictions": true,
   "format_on_save": "off",
-  // "buffer_font_family": "IBM Plex Sans"
+  "buffer_font_family": "Google Sans Code",
+  "ui_font_family": "Google Sans Code",
 }

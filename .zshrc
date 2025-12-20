@@ -29,3 +29,17 @@ eval "$(terminal-wakatime init)"
 
 # use web search in opencode
 export OPENCODE_ENABLE_EXA=1
+
+# add a nice minimal theme
+source ~/.p10k/powerlevel10k.zsh-theme
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# bun completions
+[ -s "/Users/aadishverma/.bun/_bun" ] && source "/Users/aadishverma/.bun/_bun"
+
+# playtime
+alias pi-agy="bun run /Users/aadishverma/Desktop/codeproj/sandbox/pi-agy/src/cli.ts"
+alias pigy="/Users/aadishverma/Desktop/codeproj/gh/ccs/dist/ccs.js"

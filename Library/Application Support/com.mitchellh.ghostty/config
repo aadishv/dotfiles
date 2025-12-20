@@ -1,6 +1,8 @@
 mouse-shift-capture = true
-theme = Builtin Tango Dark 
+theme = Builtin Tango Dark
 cursor-click-to-move = true
-#background-opacity = 0.5 
-#background-blur-radius = 20
+font-family = Google Sans Code
 macos-titlebar-style = tabs
+cursor-click-to-move = true
+mouse-hide-while-typing = true
+keybind = shift+enter=text:\x1b\r

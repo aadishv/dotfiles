@@ -1,52 +1,11 @@
 {
-  // // GLASSMORPHISM RULES
-  // "theme_overrides": {
-  //   "Vercel Light": {
-  //     "background.appearance": "blurred",
-  //     "background": "#ffffff55",
-  //     //1
-  //     "status_bar.background": "#ffffffaa",
-  //     "title_bar.background": "#ffffff88",
-  //     "editor.background": "#ffffff55",
-  //     "editor.gutter.background": "#ffffff55",
-  //     "tab_bar.background": "#ffffff44",
-  //     "terminal.background": "#ffffff00",
-  //     "toolbar.background": "#ffffff44",
-  //     "tab.active_background": "#ffffff22",
-  //     "tab.inactive_background": "#ffffff00",
-  //     "panel.background": "#ffffff00",
-  //     "border.variant": "#ffffff00",
-  //     "scrollbar.track.border": "#ffffff55",
-  //     //1
-  //     "editor.active_line.background": "#ffffff00"
-  //   },
-  //   "Vercel Dark": {
-  //     "background.appearance": "blurred",
-  //     "background": "#00000055",
-  //     //1
-  //     "status_bar.background": "#000000aa",
-  //     "title_bar.background": "#00000088",
-  //     "editor.background": "#00000033",
-  //     "editor.gutter.background": "#00000033",
-  //     "tab_bar.background": "#00000033",
-  //     "terminal.background": "#00000000",
-  //     "toolbar.background": "#00000044",
-  //     "tab.active_background": "#00000000",
-  //     "tab.inactive_background": "#00000000",
-  //     "panel.background": "#00000000",
-  //     "border.variant": "#00000000",
-  //     "scrollbar.track.border": "#00000055",
-  //     //1
-  //     "editor.active_line.background": "#00000000"
-  //   }
-  // },
   "context_servers": {
-    // "mcp-server-context7": {
-    //   "enabled": true,
-    //   "settings": {
-    //     "context7_api_key": ""
-    //   }
-    // }
+    "mcp-server-context7": {
+      "enabled": true,
+      "settings": {
+        "context7_api_key": "",
+      },
+    },
     "mcp-server-exa-search": {
       "enabled": true,
       "settings": {
@@ -72,7 +31,7 @@
   },
   "theme": {
     "mode": "dark",
-    "light": "Catppuccin Latte (Blur)",
+    "light": "Vercel Light",
     "dark": "Vercel Dark",
   },
   "file_scan_inclusions": ["input.txt", "output.txt"],
@@ -112,11 +71,16 @@
     "C++": {
       "show_edit_predictions": false,
     },
-        "Python": {
-          "language_servers": [
-              "ty", "ruff", "!basedpyright", "!pyrefly", "!pyright", "!pylsp"
-          ]
-        }
+    "Python": {
+      "language_servers": [
+        "ty",
+        "ruff",
+        "!basedpyright",
+        "!pyrefly",
+        "!pyright",
+        "!pylsp",
+      ],
+    },
   },
   "agent": {
     "notify_when_agent_waiting": "all_screens",

@@ -149,11 +149,11 @@
       "model": "gpt-5-mini",
     },
     "always_allow_tool_actions": true,
-    "default_profile": "write",
+    "default_profile": "ask",
     "dock": "right",
     "default_model": {
       "provider": "copilot_chat",
-      "model": "grok-code-fast-1",
+      "model": "gpt-5.2",
     },
   },
   "edit_predictions": {

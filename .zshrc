@@ -41,5 +41,7 @@ fi
 [ -s "/Users/aadishverma/.bun/_bun" ] && source "/Users/aadishverma/.bun/_bun"
 
 # playtime
-alias pi-agy="bun run /Users/aadishverma/Desktop/codeproj/sandbox/pi-agy/src/cli.ts"
 alias pigy="/Users/aadishverma/Desktop/codeproj/gh/ccs/dist/ccs.js"
+
+# local pi instance that feels like CC
+alias tau="cd /Users/aadishverma/Desktop/codeproj/gh/pi-mono/packages/coding-agent/src && bun tsx cli.ts"

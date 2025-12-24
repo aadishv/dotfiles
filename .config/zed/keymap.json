@@ -1,0 +1,150 @@
+// Zed keymap
+//
+// For information on binding keys, see the Zed
+// documentation: https://zed.dev/docs/key-bindings
+//
+// To see the default key bindings run `zed: open default keymap`
+// from the command palette.
+[
+  {
+    "context": "Workspace",
+    "bindings": {
+      "cmd-r": ["task::Spawn", { "task_name": "runner", "target": "right" }],
+      "cmd-shift-r": [
+        "task::Spawn",
+        { "task_name": "runner2", "target": "right" }
+      ],
+      "cmd-shift-d": "editor::SplitSelectionIntoLines",
+      "shift-cmd-ctrl-alt-r": "editor::Rename",
+      "shift-cmd-ctrl-alt-d": "editor::SelectAllMatches",
+      "shift-cmd-ctrl-alt-m": ["task::Spawn", { "task_name": "todo_organize" }]
+    }
+  },
+  {
+    "context": "Editor",
+    "bindings": {
+      "cmd-r": ["task::Spawn", { "task_name": "runner", "target": "right" }],
+      "cmd-shift-r": [
+        "task::Spawn",
+        { "task_name": "runner2", "target": "right" }
+      ]
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-9": [
+        "pane::ActivateItem",
+        8
+      ]
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-8": [
+        "pane::ActivateItem",
+        7
+      ]
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-7": [
+        "pane::ActivateItem",
+        6
+      ]
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-6": [
+        "pane::ActivateItem",
+        5
+      ]
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-5": [
+        "pane::ActivateItem",
+        4
+      ]
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-4": [
+        "pane::ActivateItem",
+        3
+      ]
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-3": [
+        "pane::ActivateItem",
+        2
+      ]
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-2": [
+        "pane::ActivateItem",
+        1
+      ]
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-1": [
+        "pane::ActivateItem",
+        0
+      ]
+    }
+  },
+  {
+    "context": "(Editor && mode == full)",
+    "bindings": {
+      "cmd-l": "go_to_line::Toggle"
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-]": "pane::GoForward"
+    }
+  },
+  {
+    "context": "Editor",
+    "bindings": {
+      "cmd-k cmd-{": "editor::Outdent"
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "cmd-[": "pane::GoBack"
+    }
+  },
+  {
+    "context": "Editor",
+    "bindings": {
+      "cmd-[": null
+    }
+  },
+  {
+    "context": "Editor",
+    "bindings": {
+      "cmd-]": null
+    }
+  }
+]

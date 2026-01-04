@@ -18,7 +18,14 @@
   },
   "confirm_quit": true,
   "auto_indent": true,
-  "agent_servers": {},
+  "agent_servers": {
+    "pi": {
+      "type": "custom",
+      "command": "bunx",
+      "args": ["pi-acp"],
+      "env": {},
+    },
+  },
   "diagnostics": {
     "button": true,
     "include_warnings": true,
@@ -32,7 +39,7 @@
   "theme": {
     "mode": "dark",
     "light": "Vercel Light",
-    "dark": "Vercel Dark",
+    "dark": "Fleet Dark",
   },
   "file_scan_inclusions": ["input.txt", "output.txt"],
   "debugger": {
@@ -50,6 +57,11 @@
   },
   "vim_mode": true,
   "lsp": {
+    "sourcekit-lsp": {
+      "binary": {
+        "path": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/sourcekit-lsp",
+      },
+    },
     "rust-analyzer": {
       "binary": {
         "ignore_system_version": true,
@@ -146,14 +158,14 @@
     },
     "inline_assistant_model": {
       "provider": "copilot_chat",
-      "model": "gpt-5-mini",
+      "model": "gpt-4.1",
     },
     "always_allow_tool_actions": true,
     "default_profile": "ask",
     "dock": "right",
     "default_model": {
       "provider": "copilot_chat",
-      "model": "gpt-5.2",
+      "model": "grok-code-fast-1",
     },
   },
   "edit_predictions": {

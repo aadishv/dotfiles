@@ -5,4 +5,3 @@ font-family = Google Sans Code
 macos-titlebar-style = tabs
 cursor-click-to-move = true
 mouse-hide-while-typing = true
-keybind = shift+enter=text:\x1b\r

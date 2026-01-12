@@ -1,7 +1,7 @@
 {
-  "lastChangelogVersion": "0.32.1",
-  "defaultProvider": "google-antigravity",
-  "defaultModel": "claude-opus-4-5-thinking",
-  "defaultThinkingLevel": "off",
+  "lastChangelogVersion": "0.44.0",
+  "defaultProvider": "github-copilot",
+  "defaultModel": "grok-code-fast-1",
+  "defaultThinkingLevel": "high",
   "hideThinkingBlock": false
 }

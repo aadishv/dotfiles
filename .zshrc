@@ -43,8 +43,14 @@ fi
 # playtime
 alias pigy="/Users/aadishverma/Desktop/codeproj/gh/ccs/dist/ccs.js"
 
-# local pi instance that feels like CC
-alias tau="cd /Users/aadishverma/Desktop/codeproj/gh/pi-mono/packages/coding-agent/src && bun tsx cli.ts"
-
 # for blog
 alias html-share="bun --env-file /Users/aadishverma/Desktop/codeproj/active/aadishv.dev/.env.local /Users/aadishverma/Desktop/codeproj/active/aadishv.dev/src/pages/s/_add.ts"
+
+# set up prompt editing in pi
+EDITOR=zed
+
+# Amp CLI
+export PATH="/Users/aadishverma/.amp/bin:$PATH"
+
+# add scripts
+export PATH="/Users/aadishverma/scripts:$PATH"

@@ -1,7 +1,7 @@
 {
   "lastChangelogVersion": "0.44.0",
   "defaultProvider": "github-copilot",
-  "defaultModel": "grok-code-fast-1",
-  "defaultThinkingLevel": "high",
+  "defaultModel": "gpt-5.2",
+  "defaultThinkingLevel": "medium",
   "hideThinkingBlock": false
 }

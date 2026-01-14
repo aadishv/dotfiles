@@ -30,12 +30,8 @@ eval "$(terminal-wakatime init)"
 # use web search in opencode
 export OPENCODE_ENABLE_EXA=1
 
-# add a nice minimal theme
-source ~/.p10k/powerlevel10k.zsh-theme
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
+# prompt (Starship)
+eval "$(starship init zsh)"
 
 # bun completions
 [ -s "/Users/aadishverma/.bun/_bun" ] && source "/Users/aadishverma/.bun/_bun"
@@ -54,3 +50,13 @@ export PATH="/Users/aadishverma/.amp/bin:$PATH"
 
 # add scripts
 export PATH="/Users/aadishverma/scripts:$PATH"
+
+# Ensure SSH agent is reachable in shells where SSH_AUTH_SOCK is missing (noninteractive, some IDEs)
+if [[ -z "${SSH_AUTH_SOCK:-}" && "$OSTYPE" == darwin* ]]; then
+  for sock in /private/tmp/com.apple.launchd.*/Listeners(N); do
+    if SSH_AUTH_SOCK="$sock" ssh-add -l >/dev/null 2>&1; then
+      export SSH_AUTH_SOCK="$sock"
+      break
+    fi
+  done
+fi

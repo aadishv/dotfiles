@@ -60,3 +60,42 @@ if [[ -z "${SSH_AUTH_SOCK:-}" && "$OSTYPE" == darwin* ]]; then
     fi
   done
 fi
+
+# pbcopy -> local clipboard when connected over SSH (OSC 52)
+__pi_osc52_copy() {
+  emulate -L zsh
+  setopt localoptions pipefail
+
+  local data b64 osc
+
+  data="$(cat)"
+  b64="$(printf %s "$data" | base64 | tr -d '\r\n')"
+
+  # Refuse extremely large payloads (many terminals/tmux have OSC52 limits)
+  if (( ${#b64} > 100000 )); then
+    print -u2 "pbcopy (OSC52): payload too large (${#b64} chars); falling back to system pbcopy"
+    command pbcopy 2>/dev/null || return 1
+    return 0
+  fi
+
+  osc=$'\033]52;c;'"${b64}"$'\a'
+
+  if [[ -n "${TMUX-}" ]]; then
+    # tmux passthrough
+    printf '\033Ptmux;\033%s\033\\' "$osc"
+  elif [[ "${TERM-}" == screen* ]]; then
+    printf '\033P%s\033\\' "$osc"
+  else
+    printf '%s' "$osc"
+  fi
+}
+
+pbcopy() {
+  if [[ -n "${SSH_CONNECTION-}${SSH_TTY-}" ]]; then
+    __pi_osc52_copy
+  else
+    command pbcopy "$@"
+  fi
+}
+
+export EDITOR=vim

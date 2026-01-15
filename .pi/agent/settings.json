@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.44.0",
+  "lastChangelogVersion": "0.45.7",
   "defaultProvider": "github-copilot",
   "defaultModel": "gpt-5.2",
   "defaultThinkingLevel": "medium",

@@ -1,7 +1,7 @@
 {
-  "lastChangelogVersion": "0.45.7",
-  "defaultProvider": "github-copilot",
-  "defaultModel": "gpt-5.2",
-  "defaultThinkingLevel": "medium",
+  "lastChangelogVersion": "0.47.0",
+  "defaultProvider": "openrouter",
+  "defaultModel": "minimax/minimax-m2.1",
+  "defaultThinkingLevel": "high",
   "hideThinkingBlock": false
 }

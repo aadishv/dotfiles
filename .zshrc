@@ -99,3 +99,6 @@ pbcopy() {
 }
 
 export EDITOR=vim
+
+# all of my secrets
+source ~/.secrets.sh

@@ -6,14 +6,13 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { LiteLLMModelPricing } from "@mariozechner/pi-ai";
 
 const LITELLM_PRICING_URL =
 	"https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
 
 const DEFAULT_TIERED_THRESHOLD = 200_000;
 
-interface LiteLLMModelPricingSchema {
+interface LiteLLMModelPricing {
 	input_cost_per_token?: number;
 	output_cost_per_token?: number;
 	cache_creation_input_token_cost?: number;

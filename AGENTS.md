@@ -49,3 +49,6 @@ I recommend using `-c 5000` to avoid wasting context.
 
 Use them in conjunction: `exa` to search phrases and identify key documentation resources or other sites, then `webfetch` to view their contents.
 
+# Asking questions
+
+You have access to a `questionnaire` tool. If you want to ask a user questions about implementation, ask for permissions, etc., **you should generally prefer the questionnaire tool over ending your turn to ask the user**. In general, it's best to only end the turn once a task is complete or you have grounds to believe it's impossible (despite your ability to change the environment).

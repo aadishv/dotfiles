@@ -1,0 +1,104 @@
+actions:
+  - action: file.link
+    from: common/.config/starship.toml
+    to: "{{ user.home_dir }}/.config/starship.toml"
+
+  - action: file.link
+    from: common/.config/zed/settings.json
+    to: "{{ user.home_dir }}/.config/zed/settings.json"
+
+  - action: file.link
+    from: common/.config/zed/keymap.json
+    to: "{{ user.home_dir }}/.config/zed/keymap.json"
+
+  - action: file.link
+    from: common/.config/zed/tasks.json
+    to: "{{ user.home_dir }}/.config/zed/tasks.json"
+
+  - action: file.link
+    from: common/scripts/exa
+    to: "{{ user.home_dir }}/scripts/exa"
+
+  - action: file.link
+    from: common/scripts/killport
+    to: "{{ user.home_dir }}/scripts/killport"
+
+  - action: file.link
+    from: common/scripts/webfetch
+    to: "{{ user.home_dir }}/scripts/webfetch"
+
+  - action: file.link
+    from: common/.config/opencode/opencode.json
+    to: "{{ user.home_dir }}/.config/opencode/opencode.json"
+
+  - action: file.link
+    from: common/AGENTS.md
+    to: "{{ user.home_dir }}/AGENTS.md"
+
+  - action: file.link
+    from: common/.pi/agent/settings.json
+    to: "{{ user.home_dir }}/.pi/agent/settings.json"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/compact-header.ts
+    to: "{{ user.home_dir }}/.pi/agent/extensions/compact-header.ts"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/glm-4.7-compaction.ts
+    to: "{{ user.home_dir }}/.pi/agent/extensions/glm-4.7-compaction.ts"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/pricing.ts
+    to: "{{ user.home_dir }}/.pi/agent/extensions/pricing.ts"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/question.ts
+    to: "{{ user.home_dir }}/.pi/agent/extensions/question.ts"
+
+  - action: file.link
+    from: common/.pi/agent/skills/cloud-compute/SKILL.md
+    to: "{{ user.home_dir }}/.pi/agent/skills/cloud-compute/SKILL.md"
+
+  - action: file.link
+    from: common/.pi/agent/skills/cloud-compute/ghsh
+    to: "{{ user.home_dir }}/.pi/agent/skills/cloud-compute/ghsh"
+
+  - action: file.link
+    from: common/.pi/agent/skills/cloud-research-agent/SKILL.md
+    to: "{{ user.home_dir }}/.pi/agent/skills/cloud-research-agent/SKILL.md"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/.gitignore
+    to: "{{ user.home_dir }}/.pi/agent/extensions/.gitignore"
+
+  - action: file.link
+    from: common/Pictures/flexoki-dynamic.heic
+    to: "{{ user.home_dir }}/Pictures/flexoki-dynamic.heic"
+
+  - action: file.link
+    from: common/Music/Music/download.sh
+    to: "{{ user.home_dir }}/Music/Music/download.sh"
+
+  - action: file.link
+    from: common/Music/Music/fix_mp3_duration.sh
+    to: "{{ user.home_dir }}/Music/Music/fix_mp3_duration.sh"
+
+  - action: file.link
+    from: common/Music/Music/lyrics/index-name.ts
+    to: "{{ user.home_dir }}/Music/Music/lyrics/index-name.ts"
+
+  - action: file.link
+    from: common/Music/Music/lyrics/index.ts
+    to: "{{ user.home_dir }}/Music/Music/lyrics/index.ts"
+
+  - action: file.link
+    from: common/Music/Music/lyrics/sync.ts
+    to: "{{ user.home_dir }}/Music/Music/lyrics/sync.ts"
+
+  - action: file.link
+    from: common/Music/Music/lyrics/package.json
+    to: "{{ user.home_dir }}/Music/Music/lyrics/package.json"
+
+  - action: file.link
+    from: common/Music/Music/lyrics/tsconfig.json
+    to: "{{ user.home_dir }}/Music/Music/lyrics/tsconfig.json"

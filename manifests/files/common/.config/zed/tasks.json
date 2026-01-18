@@ -1,0 +1,12 @@
+[
+  {
+    "label": "runner",
+    "command": "bash ./runner.sh",
+    "shell": "system"
+  },
+  {
+    "label": "runner2",
+    "command": "bash ./runner2.sh",
+    "shell": "system"
+  }
+]

@@ -1,0 +1,35 @@
+#!/bin/bash
+# note from Aadish: this was **entirely** vibe coded by Gemini, do not blame me if it destroys your laptop. I don't even know how to write shell lol
+
+# 1. Try to find the active codespace
+# We use || true to prevent the script from crashing if grep returns no matches (exit code 1)
+CODESPACE_NAME=$(gh codespace ls --json 'name' --jq '.[].name' | grep pi-cloud | head -1)
+
+# If the variable is empty, the find failed
+if [ -z "$CODESPACE_NAME" ]; then
+    echo "No active 'pi-cloud' codespace found. Creating a new one..."
+    
+    # 1a. Create new codespace
+    # We capture the output of tail -1 as the name
+
+    # Use a 10m idle timeout to save resources
+    # Pro accounts get 180 hours of compute -> 1080 requests, more than enough
+    CODESPACE_NAME=$(gh codespace create --default-permissions -R aadishv/scratchpad -d pi-cloud -m basicLinux32gb --idle-timeout 10m | tail -1)
+    
+    # Check if creation failed (variable is still empty or command errored)
+    if [ -z "CODESPACE_NAME" ]; then
+        echo "Error: Failed to create codespace. Exiting."
+        exit 1
+    fi
+    
+    echo "Created new codespace: $CODESPACE_NAME"
+	
+    echo "Installing @mariozechner/pi-coding-agent..."
+    gh codespace ssh -c "$CODESPACE_NAME" -- "source /etc/profile.d/codespaces.sh; npm install -g @mariozechner/pi-coding-agent"
+else
+    echo "Found existing codespace: $CODESPACE_NAME"
+fi
+
+# 2. Run the SSH command
+# Escape arguments so quotes/commas survive the SSH trip
+gh codespace ssh -c "$CODESPACE_NAME" -- "source /etc/profile.d/codespaces.sh; eval $(printf '%q ' "$@")"

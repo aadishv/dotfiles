@@ -1,0 +1,230 @@
+#!/usr/bin/env bun
+
+const API_CONFIG = {
+  BASE_URL: "https://mcp.exa.ai",
+  ENDPOINTS: {
+    SEARCH: "/mcp",
+  },
+  DEFAULT_NUM_RESULTS: 8,
+} as const
+
+interface McpSearchRequest {
+  jsonrpc: string
+  id: number
+  method: string
+  params: {
+    name: string
+    arguments: {
+      query: string
+      numResults?: number
+      livecrawl?: "fallback" | "preferred"
+      type?: "auto" | "fast" | "deep"
+      contextMaxCharacters?: number
+    }
+  }
+}
+
+interface McpSearchResponse {
+  jsonrpc: string
+  result: {
+    content: Array<{
+      type: string
+      text: string
+    }>
+  }
+}
+
+async function searchWeb(query: string, options: {
+  numResults?: number
+  livecrawl?: "fallback" | "preferred"
+  type?: "auto" | "fast" | "deep"
+  contextMaxCharacters?: number
+}) {
+  const searchRequest: McpSearchRequest = {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: {
+      name: "web_search_exa",
+      arguments: {
+        query,
+        type: options.type || "auto",
+        numResults: options.numResults || API_CONFIG.DEFAULT_NUM_RESULTS,
+        livecrawl: options.livecrawl || "fallback",
+        contextMaxCharacters: options.contextMaxCharacters,
+      },
+    },
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 25000)
+
+  try {
+    const headers: Record<string, string> = {
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+    }
+
+    const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(searchRequest),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Search error (${response.status}): ${errorText}`)
+    }
+
+    const responseText = await response.text()
+
+    // Parse SSE response
+    const lines = responseText.split("\n")
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        try {
+          const data: McpSearchResponse = JSON.parse(line.substring(6))
+          if (data.result && data.result.content && data.result.content.length > 0) {
+            return data.result.content[0].text
+          }
+        } catch (e) {
+          // Ignore parse errors for incomplete SSE data
+        }
+      }
+    }
+
+    return "No search results found. Please try a different query."
+  } catch (error) {
+    clearTimeout(timeoutId)
+
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Search request timed out")
+    }
+
+    throw error
+  }
+}
+
+function printHelp() {
+  console.log(`
+Usage: exa [options] <query>
+
+Search the web using Exa AI
+
+Arguments:
+  <query>                 Search query (required)
+
+Options:
+  -n, --num-results <n>   Number of search results to return (default: 8)
+  -l, --livecrawl <mode>  Live crawl mode: fallback or preferred (default: fallback)
+  -t, --type <type>       Search type: auto, fast, or deep (default: auto)
+  -c, --context-max-chars <n>  Maximum characters for context
+  -h, --help              Show this help message
+
+Examples:
+  exa "how to use opencode"
+  exa -n 5 -t deep "typescript best practices"
+  exa --livecrawl preferred "current news"
+`)
+}
+
+function parseArgs(args: string[]) {
+  const options: {
+    numResults?: number
+    livecrawl?: "fallback" | "preferred"
+    type?: "auto" | "fast" | "deep"
+    contextMaxCharacters?: number
+    help?: boolean
+  } = {}
+
+  let query: string | undefined
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+
+    if (arg === "-h" || arg === "--help") {
+      options.help = true
+      break
+    }
+
+    if (arg === "-n" || arg === "--num-results") {
+      const value = args[++i]
+      if (!value || isNaN(Number(value))) {
+        console.error("Error: --num-results requires a number")
+        process.exit(1)
+      }
+      options.numResults = parseInt(value)
+    } else if (arg === "-l" || arg === "--livecrawl") {
+      const value = args[++i]
+      if (!value || !["fallback", "preferred"].includes(value)) {
+        console.error("Error: --livecrawl must be 'fallback' or 'preferred'")
+        process.exit(1)
+      }
+      options.livecrawl = value as "fallback" | "preferred"
+    } else if (arg === "-t" || arg === "--type") {
+      const value = args[++i]
+      if (!value || !["auto", "fast", "deep"].includes(value)) {
+        console.error("Error: --type must be 'auto', 'fast', or 'deep'")
+        process.exit(1)
+      }
+      options.type = value as "auto" | "fast" | "deep"
+    } else if (arg === "-c" || arg === "--context-max-chars") {
+      const value = args[++i]
+      if (!value || isNaN(Number(value))) {
+        console.error("Error: --context-max-chars requires a number")
+        process.exit(1)
+      }
+      options.contextMaxCharacters = parseInt(value)
+    } else if (!arg.startsWith("-")) {
+      if (query) {
+        console.error("Error: Only one query argument allowed")
+        process.exit(1)
+      }
+      query = arg
+    } else {
+      console.error(`Error: Unknown option: ${arg}`)
+      printHelp()
+      process.exit(1)
+    }
+  }
+
+  if (options.help) {
+    printHelp()
+    process.exit(0)
+  }
+
+  if (!query) {
+    console.error("Error: Query is required")
+    printHelp()
+    process.exit(1)
+  }
+
+  return { query, options }
+}
+
+async function main() {
+  const { query, options } = parseArgs(process.argv.slice(2))
+
+  try {
+    console.log(`Searching for: "${query}"`)
+    console.log("Options:", {
+      numResults: options.numResults,
+      livecrawl: options.livecrawl,
+      type: options.type,
+      contextMaxCharacters: options.contextMaxCharacters,
+    })
+    console.log("---\n")
+
+    const result = await searchWeb(query, options)
+
+    console.log(result)
+  } catch (error) {
+    console.error("Error:", error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  }
+}
+
+main()

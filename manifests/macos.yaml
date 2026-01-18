@@ -1,0 +1,10 @@
+where: os.name == "macos"
+
+actions:
+  - action: file.link
+    from: macos/zshrc
+    to: "{{ user.home_dir }}/.zshrc"
+
+  - action: file.link
+    from: macos/ghostty/config
+    to: "{{ user.home_dir }}/Library/Application Support/com.mitchellh.ghostty/config"

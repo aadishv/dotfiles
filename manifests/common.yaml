@@ -28,16 +28,8 @@ actions:
     to: "{{ user.home_dir }}/.config/zed/tasks.json"
 
   - action: file.link
-    from: common/scripts/exa
-    to: "{{ user.home_dir }}/scripts/exa"
-
-  - action: file.link
     from: common/scripts/killport
     to: "{{ user.home_dir }}/scripts/killport"
-
-  - action: file.link
-    from: common/scripts/webfetch
-    to: "{{ user.home_dir }}/scripts/webfetch"
 
   - action: file.link
     from: common/scripts/codexpilot
@@ -152,6 +144,10 @@ actions:
     to: "{{ user.home_dir }}/Music/Music/fix_mp3_duration.sh"
 
   - action: file.link
+    from: common/Music/Music/lyrics/README.md
+    to: "{{ user.home_dir }}/Music/Music/lyrics/README.md"
+
+  - action: file.link
     from: common/Music/Music/lyrics/index-name.ts
     to: "{{ user.home_dir }}/Music/Music/lyrics/index-name.ts"
 
@@ -166,6 +162,10 @@ actions:
   - action: file.link
     from: common/Music/Music/lyrics/package.json
     to: "{{ user.home_dir }}/Music/Music/lyrics/package.json"
+
+  - action: file.link
+    from: common/Music/Music/lyrics/bun.lock
+    to: "{{ user.home_dir }}/Music/Music/lyrics/bun.lock"
 
   - action: file.link
     from: common/Music/Music/lyrics/tsconfig.json

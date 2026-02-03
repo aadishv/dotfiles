@@ -1,0 +1,271 @@
+#!/usr/bin/env bun
+import { existsSync, readFileSync, writeFileSync, copyFileSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
+
+const AUTH_PATH = join(homedir(), ".pi/agent/auth.json");
+const CODEX_CONFIG_PATH = join(homedir(), ".codex/config.toml");
+const COPILOT_API_BASE = "https://api.individual.githubcopilot.com";
+
+const useCodex = process.argv.includes("--codex");
+const startCodex = process.argv.includes("--start");
+const LOG_FILE = "/tmp/codexpilot.log";
+
+function log(message: string, isError = false) {
+  const timestamp = new Date().toISOString();
+  const formatted = `[${timestamp}] ${message}\n`;
+  if (isError) {
+    console.error(message);
+  } else if (!startCodex) {
+    console.log(message);
+  }
+  try {
+    require("fs").appendFileSync(LOG_FILE, formatted);
+  } catch (e) {
+    // ignore logging errors
+  }
+}
+
+// Parse --model flag: --model=gpt-5.2-codex:high
+const modelArg = process.argv.find(arg => arg.startsWith("--model"));
+let defaultModel = "gpt-4o";
+let reasoningEffort = "medium";
+
+if (modelArg) {
+  const modelValue = modelArg.includes("=") ? modelArg.split("=")[1] : process.argv[process.argv.indexOf(modelArg) + 1];
+  if (modelValue) {
+    if (modelValue.includes(":")) {
+      [defaultModel, reasoningEffort] = modelValue.split(":");
+    } else {
+      defaultModel = modelValue;
+    }
+  }
+}
+
+interface AuthJson {
+  "github-copilot"?: {
+    access: string;
+    expires: number;
+    refresh: string;
+  };
+}
+
+async function refreshCopilotToken(refreshToken: string): Promise<string | null> {
+  log("Token expired. Refreshing GitHub Copilot token...");
+  try {
+    const response = await fetch("https://api.github.com/copilot_internal/v2/token", {
+      headers: {
+        Authorization: `Bearer ${refreshToken}`,
+        "User-Agent": "GitHubCopilotChat/0.35.0",
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      log(`Refresh failed: ${response.status} ${text}`, true);
+      return null;
+    }
+
+    const data = (await response.json()) as any;
+    const newAccess = data.token;
+    const expiresAt = data.expires_at * 1000;
+
+    const auth: AuthJson = JSON.parse(readFileSync(AUTH_PATH, "utf-8"));
+    if (auth["github-copilot"]) {
+      auth["github-copilot"].access = newAccess;
+      auth["github-copilot"].expires = expiresAt;
+      writeFileSync(AUTH_PATH, JSON.stringify(auth, null, 2));
+      log("Auth file updated with new token.");
+    }
+
+    return newAccess;
+  } catch (e) {
+    log(`Error refreshing token: ${e}`, true);
+    return null;
+  }
+}
+
+async function getCopilotToken(): Promise<string | null> {
+  if (!existsSync(AUTH_PATH)) {
+    log(`Auth file not found at ${AUTH_PATH}`, true);
+    return null;
+  }
+  try {
+    const auth: AuthJson = JSON.parse(readFileSync(AUTH_PATH, "utf-8"));
+    const entry = auth["github-copilot"];
+    if (!entry) return null;
+
+    if (Date.now() > entry.expires - 300000) {
+      return await refreshCopilotToken(entry.refresh);
+    }
+
+    return entry.access;
+  } catch (e) {
+    log(`Failed to parse auth.json: ${e}`, true);
+    return null;
+  }
+}
+
+function setupCodex() {
+  if (!existsSync(CODEX_CONFIG_PATH)) {
+    log("No Codex config found, skipping registration.");
+    return;
+  }
+
+  log(`Registering 'copilot' provider in Codex config...`);
+  const originalConfig = readFileSync(CODEX_CONFIG_PATH, "utf-8");
+
+  // Only add the provider section, don't touch global model/provider settings
+  const providerSection = `
+[model_providers.copilot]
+name = "GitHub Copilot (via Pi Proxy)"
+base_url = "http://localhost:6776"
+wire_api = "responses"
+api_key = "dummy"
+`;
+
+  if (!originalConfig.includes("[model_providers.copilot]")) {
+    writeFileSync(CODEX_CONFIG_PATH, originalConfig.trim() + "\n" + providerSection);
+  } else {
+    // If it exists, we might want to update the base_url just in case
+    const updatedConfig = originalConfig.replace(
+      /\[model_providers\.copilot\][^\[]*/,
+      providerSection.trim() + "\n\n"
+    );
+    writeFileSync(CODEX_CONFIG_PATH, updatedConfig);
+  }
+}
+
+function restoreCodex() {
+  process.exit(0);
+}
+
+if (useCodex) {
+  setupCodex();
+  process.on("SIGTERM", restoreCodex);
+  process.on("SIGINT", restoreCodex);
+}
+
+const server = Bun.serve({
+  port: 6776,
+  async fetch(req) {
+    const url = new URL(req.url);
+    const path = url.pathname;
+    
+    log(`[${req.method}] ${path}`);
+
+    const token = await getCopilotToken();
+    if (!token) {
+      return new Response("No valid GitHub Copilot token available", { status: 401 });
+    }
+
+    const targetUrl = new URL(path + url.search, COPILOT_API_BASE);
+    const headers = new Headers(req.headers);
+    
+    headers.set("Authorization", `Bearer ${token}`);
+    headers.set("User-Agent", "GitHubCopilotChat/0.35.0");
+    headers.set("Editor-Version", "vscode/1.107.0");
+    headers.set("Editor-Plugin-Version", "copilot-chat/0.35.0");
+    headers.set("Copilot-Integration-Id", "vscode-chat");
+    
+    let body: any = null;
+    if (req.method === "POST") {
+      try {
+        const rawBody = await req.text();
+        log(`[POST] Request body: ${rawBody}`);
+        body = JSON.parse(rawBody);
+
+        // Strip web search tool if present as Copilot API doesn't support it
+        if (body.tools && Array.isArray(body.tools)) {
+          body.tools = body.tools.filter((t: any) => {
+            const name = t.function?.name || t.name;
+            const type = t.type;
+            const isSearch = name === "web_search" || name === "searchWeb" || name === "web-search" || type === "web_search";
+            if (isSearch) log(`[STRIP] Removing tool: ${name || type}`);
+            return !isSearch;
+          });
+          if (body.tools.length === 0) {
+            log("[STRIP] All tools removed, deleting tools property");
+            delete body.tools;
+          }
+        }
+
+        const messages = body.messages || body.input || [];
+        const lastMessage = Array.isArray(messages) ? messages[messages.length - 1] : null;
+        const isAgentCall = lastMessage ? lastMessage.role !== "user" : false;
+        headers.set("X-Initiator", isAgentCall ? "agent" : "user");
+        
+        const hasImages = Array.isArray(messages) && messages.some((msg: any) => {
+          if (Array.isArray(msg.content)) {
+            return msg.content.some((c: any) => c.type === "image" || c.type === "input_image" || c.image_url);
+          }
+          return false;
+        });
+        if (hasImages) {
+          headers.set("Copilot-Vision-Request", "true");
+        }
+
+        headers.set("Openai-Intent", "conversation-edits");
+      } catch (e) {
+        // Fallback
+      }
+    }
+
+    headers.delete("host");
+
+    try {
+      const response = await fetch(targetUrl.toString(), {
+        method: req.method,
+        headers,
+        body: body ? JSON.stringify(body) : null,
+        signal: req.signal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.clone().text();
+        log(`[ERROR] Backend returned ${response.status}: ${errorText}`, true);
+      }
+
+      const resHeaders = new Headers(response.headers);
+      resHeaders.delete("content-encoding");
+
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: resHeaders,
+      });
+    } catch (e: any) {
+      log(`Proxy error: ${e.message}`, true);
+      return new Response(`Proxy error: ${e.message}`, { status: 500 });
+    }
+  },
+});
+
+log(`Copilot Proxy listening on http://localhost:${server.port}`);
+if (useCodex) log("Codex integration active. 'copilot' set as default provider (wire_api = \"responses\").");
+
+if (startCodex) {
+  const { spawn } = require("child_process");
+  log("Starting Codex...");
+  
+  const dashDashIndex = process.argv.indexOf("--");
+  const extraArgs = dashDashIndex !== -1 ? process.argv.slice(dashDashIndex + 1) : [];
+
+  const args = [
+    "-c", "model_provider=\"copilot\"",
+    "-c", `model="${defaultModel}"`,
+    "-c", `model_reasoning_effort="${reasoningEffort}"`,
+    ...extraArgs
+  ];
+  
+  const codex = spawn("codex", args, { stdio: "inherit" });
+
+  codex.on("close", (code: number) => {
+    log(`Codex exited with code ${code}`);
+    restoreCodex();
+  });
+
+  process.on("SIGINT", () => {
+    codex.kill("SIGINT");
+  });
+}

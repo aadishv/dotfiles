@@ -28,6 +28,38 @@ actions:
     to: "{{ user.home_dir }}/scripts/webfetch"
 
   - action: file.link
+    from: common/scripts/codexpilot
+    to: "{{ user.home_dir }}/scripts/codexpilot"
+
+  - action: file.link
+    from: common/scripts/pi-usage
+    to: "{{ user.home_dir }}/scripts/pi-usage"
+
+  - action: file.link
+    from: common/scripts/preview-md
+    to: "{{ user.home_dir }}/scripts/preview-md"
+
+  - action: file.link
+    from: common/scripts/recent-sessions
+    to: "{{ user.home_dir }}/scripts/recent-sessions"
+
+  - action: file.link
+    from: common/scripts/subagent
+    to: "{{ user.home_dir }}/scripts/subagent"
+
+  - action: file.link
+    from: common/scripts/package.json
+    to: "{{ user.home_dir }}/scripts/package.json"
+
+  - action: file.link
+    from: common/scripts/tsconfig.json
+    to: "{{ user.home_dir }}/scripts/tsconfig.json"
+
+  - action: file.link
+    from: common/scripts/bun.lock
+    to: "{{ user.home_dir }}/scripts/bun.lock"
+
+  - action: file.link
     from: common/.config/opencode/opencode.json
     to: "{{ user.home_dir }}/.config/opencode/opencode.json"
 
@@ -40,20 +72,48 @@ actions:
     to: "{{ user.home_dir }}/.pi/agent/settings.json"
 
   - action: file.link
-    from: common/.pi/agent/extensions/compact-header.ts
-    to: "{{ user.home_dir }}/.pi/agent/extensions/compact-header.ts"
-
-  - action: file.link
-    from: common/.pi/agent/extensions/glm-4.7-compaction.ts
-    to: "{{ user.home_dir }}/.pi/agent/extensions/glm-4.7-compaction.ts"
-
-  - action: file.link
     from: common/.pi/agent/extensions/pricing.ts
     to: "{{ user.home_dir }}/.pi/agent/extensions/pricing.ts"
 
   - action: file.link
-    from: common/.pi/agent/extensions/question.ts
-    to: "{{ user.home_dir }}/.pi/agent/extensions/question.ts"
+    from: common/.pi/agent/extensions/claude-style.ts
+    to: "{{ user.home_dir }}/.pi/agent/extensions/claude-style.ts"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/clean-startup.ts
+    to: "{{ user.home_dir }}/.pi/agent/extensions/clean-startup.ts"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/discord.ts
+    to: "{{ user.home_dir }}/.pi/agent/extensions/discord.ts"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/fps-counter.ts
+    to: "{{ user.home_dir }}/.pi/agent/extensions/fps-counter.ts"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/user-as-tool.ts
+    to: "{{ user.home_dir }}/.pi/agent/extensions/user-as-tool.ts"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/todo.ts
+    to: "{{ user.home_dir }}/.pi/agent/extensions/todo.ts"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/package.json
+    to: "{{ user.home_dir }}/.pi/agent/extensions/package.json"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/tsconfig.json
+    to: "{{ user.home_dir }}/.pi/agent/extensions/tsconfig.json"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/bun.lock
+    to: "{{ user.home_dir }}/.pi/agent/extensions/bun.lock"
+
+  - action: file.link
+    from: common/.pi/agent/extensions/.gitignore
+    to: "{{ user.home_dir }}/.pi/agent/extensions/.gitignore"
 
   - action: file.link
     from: common/.pi/agent/skills/cloud-compute/SKILL.md
@@ -66,10 +126,6 @@ actions:
   - action: file.link
     from: common/.pi/agent/skills/cloud-research-agent/SKILL.md
     to: "{{ user.home_dir }}/.pi/agent/skills/cloud-research-agent/SKILL.md"
-
-  - action: file.link
-    from: common/.pi/agent/extensions/.gitignore
-    to: "{{ user.home_dir }}/.pi/agent/extensions/.gitignore"
 
   - action: file.link
     from: common/Pictures/flexoki-dynamic.heic

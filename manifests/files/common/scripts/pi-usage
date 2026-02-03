@@ -1,0 +1,223 @@
+#!/usr/bin/env bun
+import { join } from "path";
+import { readdir } from "fs/promises";
+import { homedir, cpus } from "os";
+import { parseDate } from "chrono-node";
+
+const LITELLM_PRICING_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
+
+interface TokenStats {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+interface DisplayStats extends TokenStats {
+  cost: number;
+}
+
+class PricingFetcher {
+  private pricingData: any = null;
+
+  async fetch() {
+    if (this.pricingData) return this.pricingData;
+    const response = await fetch(LITELLM_PRICING_URL);
+    this.pricingData = await response.json();
+    return this.pricingData;
+  }
+
+  processModelName(modelName: string): string {
+    let name = modelName.toLowerCase();
+    if (name.startsWith("oswe-")) name = "gpt-5-mini";
+    name = name.replace(/-(high|low|medium|minimal|xhigh|thinking)$/, "");
+    name = name.replace(/^gemini-claude-/, "claude-");
+    name = name.replace(/^(anthropic|openai|google|github-copilot|z-ai|x-ai|minimax|bedrock|vertex_ai)\//, "");
+    if ((name.startsWith("haiku") || name.startsWith("sonnet") || name.startsWith("opus")) && !name.startsWith("claude-")) {
+      name = "claude-" + name;
+    }
+    return name;
+  }
+
+  getPricing(modelName: string) {
+    if (!this.pricingData) return null;
+    const processedName = this.processModelName(modelName);
+    if (this.pricingData[processedName]) return this.pricingData[processedName];
+    const normalizedDots = processedName.replace(/\./g, "-");
+    if (this.pricingData[normalizedDots]) return this.pricingData[normalizedDots];
+    for (const [key, value] of Object.entries(this.pricingData)) {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey === processedName || lowerKey.split('/').pop() === processedName || lowerKey.includes(processedName)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  calculateCost(modelName: string, usage: TokenStats) {
+    const pricing = this.getPricing(modelName);
+    if (!pricing) return 0;
+    const inputCost = (usage.input || 0) * (pricing.input_cost_per_token || 0);
+    const outputCost = (usage.output || 0) * (pricing.output_cost_per_token || 0);
+    const cacheReadPrice = pricing.cache_read_input_token_cost || pricing.input_cost_per_token || 0;
+    const cacheWritePrice = pricing.cache_creation_input_token_cost || pricing.input_cost_per_token || 0;
+    return inputCost + outputCost + (usage.cacheRead || 0) * cacheReadPrice + (usage.cacheWrite || 0) * cacheWritePrice;
+  }
+}
+
+async function* getFiles(dir: string): AsyncGenerator<string> {
+  try {
+    const dirents = await readdir(dir, { withFileTypes: true });
+    for (const dirent of dirents) {
+      const res = join(dir, dirent.name);
+      if (dirent.isDirectory()) yield* getFiles(res);
+      else if (res.endsWith(".jsonl")) yield res;
+    }
+  } catch (e) {}
+}
+
+if (import.meta.main) {
+  const sinceArgs = process.argv.slice(2);
+  
+  if (sinceArgs.length === 0) {
+    console.error("Error: 'since' argument is required");
+    console.error("Usage: pi-usage <since>");
+    console.error("Examples:");
+    console.error("  pi-usage '3 days ago'");
+    console.error("  pi-usage 3 days ago");
+    console.error("  pi-usage 'since this morning'");
+    console.error("  pi-usage last week");
+    console.error("  pi-usage today");
+    process.exit(1);
+  }
+
+  const now = new Date();
+  let startDate: number | null = null;
+
+  // Parse the natural language date expression
+  const sinceArg = sinceArgs.join(" ");
+  const parsed = parseDate(sinceArg, now);
+  if (parsed) {
+    startDate = parsed.getTime();
+  } else {
+    console.error(`Error: Could not parse date expression: "${sinceArg}"`);
+    process.exit(1);
+  }
+
+  const sessionsDir = join(homedir(), ".pi", "agent", "sessions");
+  const fetcher = new PricingFetcher();
+  const pricingPromise = fetcher.fetch();
+
+  const allFiles: string[] = [];
+  for await (const file of getFiles(sessionsDir)) allFiles.push(file);
+
+  const workerCount = Math.min(cpus().length, allFiles.length);
+  const chunkSize = Math.ceil(allFiles.length / workerCount);
+  const workers: Promise<[string, TokenStats][]>[] = [];
+
+  for (let i = 0; i < workerCount; i++) {
+    const chunk = allFiles.slice(i * chunkSize, (i + 1) * chunkSize);
+    if (chunk.length === 0) continue;
+    workers.push(new Promise((resolve) => {
+      const worker = new Worker(import.meta.url);
+      worker.postMessage({ chunk, startDate });
+      worker.onmessage = (e) => {
+        resolve(e.data);
+        worker.terminate();
+      };
+    }));
+  }
+
+  const [workerResults, pricingData] = await Promise.all([Promise.all(workers), pricingPromise]);
+  const rawModelStats = new Map<string, TokenStats>();
+
+  for (const results of workerResults) {
+    for (const [rawModel, s] of results) {
+      if (!rawModelStats.has(rawModel)) rawModelStats.set(rawModel, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+      const stats = rawModelStats.get(rawModel)!;
+      stats.input += s.input;
+      stats.output += s.output;
+      stats.cacheRead += s.cacheRead;
+      stats.cacheWrite += s.cacheWrite;
+    }
+  }
+
+  const displayStats = new Map<string, DisplayStats>();
+  let totalCost = 0, totalInput = 0, totalOutput = 0, totalCacheR = 0;
+
+  for (const [rawModel, usage] of rawModelStats) {
+    const modelName = fetcher.processModelName(rawModel).replace(/\./g, "-").replace(/-preview$/, "");
+    const cost = fetcher.calculateCost(rawModel, usage);
+    
+    if (!displayStats.has(modelName)) {
+      displayStats.set(modelName, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+    }
+    
+    const s = displayStats.get(modelName)!;
+    s.input += usage.input;
+    s.output += usage.output;
+    s.cacheRead += usage.cacheRead;
+    s.cacheWrite += usage.cacheWrite;
+    s.cost += cost;
+
+    totalInput += usage.input;
+    totalOutput += usage.output;
+    totalCacheR += usage.cacheRead;
+    totalCost += cost;
+  }
+
+  const tabularData = Array.from(displayStats.entries())
+    .sort((a, b) => b[1].cost - a[1].cost)
+    .map(([model, s]) => ({
+      Model: model.substring(0, 35),
+      Input: s.input.toLocaleString(),
+      Output: s.output.toLocaleString(),
+      CacheR: s.cacheRead.toLocaleString(),
+      Cost: `$${s.cost.toFixed(2)}`
+    }));
+
+  tabularData.push({
+    Model: "TOTAL",
+    Input: totalInput.toLocaleString(),
+    Output: totalOutput.toLocaleString(),
+    CacheR: totalCacheR.toLocaleString(),
+    Cost: `$${totalCost.toFixed(2)}`
+  });
+
+  console.log(`Usage Statistics (since ${new Date(startDate!).toLocaleString()}):`);
+  console.table(tabularData);
+} else {
+  // WORKER THREAD
+  self.onmessage = async (e: MessageEvent) => {
+    const { chunk, startDate } = e.data;
+    const localStats = new Map<string, TokenStats>();
+
+    for (const file of chunk) {
+      try {
+        const content = await Bun.file(file).text();
+        const lines = content.split("\n");
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const entry = JSON.parse(line);
+          if (startDate && new Date(entry.timestamp).getTime() < startDate) continue;
+
+          if (entry.type === "message" && entry.message?.role === "assistant" && entry.message.model) {
+            const rawModel = entry.message.model;
+            const usage = entry.message.usage || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+            
+            if (!localStats.has(rawModel)) {
+              localStats.set(rawModel, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+            }
+            
+            const s = localStats.get(rawModel)!;
+            s.input += usage.input || 0;
+            s.output += usage.output || 0;
+            s.cacheRead += usage.cacheRead || 0;
+            s.cacheWrite += usage.cacheWrite || 0;
+          }
+        }
+      } catch (e) {}
+    }
+    self.postMessage(Array.from(localStats.entries()));
+  };
+}

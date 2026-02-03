@@ -1,0 +1,18 @@
+actions:
+  - action: command.run
+    command: bash
+    args:
+      - -c
+      - "command -v cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+
+  - action: command.run
+    command: bash
+    args:
+      - -c
+      - "command -v uv || curl -LsSf https://astral.sh/uv/install.sh | sh"
+
+  - action: command.run
+    command: bash
+    args:
+      - -c
+      - "command -v bun || curl -fsSL https://bun.sh/install | bash"

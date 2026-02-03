@@ -1,0 +1,299 @@
+#!/usr/bin/env bun
+
+import fs from "node:fs";
+import path from "node:path";
+import { Marked } from "marked";
+import { createHighlighter } from "shiki";
+import katex from "katex";
+import { formatDistanceToNow, parse, isToday, isTomorrow, format } from "date-fns";
+
+const filePath = process.argv[2];
+if (!filePath) {
+  console.error("Usage: preview <file.md>");
+  process.exit(1);
+}
+
+const absPath = path.resolve(filePath);
+if (!fs.existsSync(absPath)) {
+  console.error(`File not found: ${absPath}`);
+  process.exit(1);
+}
+
+const highlighter = await createHighlighter({
+  themes: ['github-light', 'github-dark'],
+  langs: ['javascript', 'typescript', 'python', 'html', 'css', 'json', 'markdown', 'shell', 'rust', 'go', 'bash', 'tsx', 'jsx', 'c', 'cpp', 'java', 'ruby', 'swift', 'kotlin', 'sql', 'yaml', 'toml', 'xml']
+});
+
+const marked = new Marked();
+
+function formatDateTag(dateStr) {
+  try {
+    // Parse MM/DD/YY format - assuming 20XX for year
+    const parsed = parse(dateStr, 'MM/dd/yy', new Date());
+
+    if (isToday(parsed)) {
+      return 'today';
+    } else if (isTomorrow(parsed)) {
+      return 'tomorrow';
+    } else {
+      return formatDistanceToNow(parsed, { addSuffix: true });
+    }
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+function renderMarkdown(md) {
+  let content = md;
+
+  // Process date tags like [@02/02/26] before markdown rendering
+  content = content.replace(/\[@(\d{2}\/\d{2}\/\d{2})\]/g, (match, date) => {
+    const naturalDate = formatDateTag(date);
+    return `<span class="date-tag">${naturalDate}</span>`;
+  });
+
+  const blocks = [];
+  content = content.replace(/\$\$([\s\S]+?)\$\$/g, (match, formula) => {
+    const id = `MATHBLOCK${blocks.length}ENDMATH`;
+    blocks.push(katex.renderToString(formula, { displayMode: true, throwOnError: false }));
+    return id;
+  });
+
+  const inlines = [];
+  content = content.replace(/\$([^$\n]+?)\$/g, (match, formula) => {
+    const id = `MATHINLINE${inlines.length}ENDMATH`;
+    inlines.push(katex.renderToString(formula, { displayMode: false, throwOnError: false }));
+    return id;
+  });
+
+  marked.use({
+    gfm: true,
+    renderer: {
+      code({ text, lang }) {
+        if (lang === 'latex' || lang === 'katex') {
+          return katex.renderToString(text, { displayMode: true, throwOnError: false });
+        }
+        try {
+          return highlighter.codeToHtml(text, { 
+            lang: lang || 'text', 
+            themes: { light: 'github-light', dark: 'github-dark' },
+            defaultColor: 'light'
+          });
+        } catch (e) {
+          return `<pre><code>${text}</code></pre>`;
+        }
+      }
+    }
+  });
+
+  let html = marked.parse(content);
+
+  // Marked might wrap our placeholders in <p> or <em>. We replace them globally.
+  blocks.forEach((math, i) => {
+    html = html.split(`MATHBLOCK${i}ENDMATH`).join(math);
+  });
+  inlines.forEach((math, i) => {
+    html = html.split(`MATHINLINE${i}ENDMATH`).join(math);
+  });
+
+  return html;
+}
+
+const clients = new Set();
+
+let port = 5050;
+let server;
+
+while (true) {
+  try {
+    server = Bun.serve({
+      port,
+      hostname: "0.0.0.0",
+      fetch(req, server) {
+        const url = new URL(req.url);
+
+        if (url.pathname === "/ws") {
+          if (server.upgrade(req)) return;
+          return new Response("Upgrade failed", { status: 500 });
+        }
+
+        if (url.pathname === "/") {
+          const template = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${path.basename(absPath)}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Google+Sans+Code:ital,wght@0,300..800;1,300..800&display=swap');
+    :root {
+      --bg: #ffffff;
+      --fg: #1f2328;
+      --link: #0969da;
+      /* Blog light theme colors */
+      --aadish: 0 72% 51%;
+      --muted: 210 40% 96.1%;
+      --border: 214.3 31.8% 91.4%;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #000000;
+        --fg: #d1d5db;
+        --link: #4493f8;
+        /* Blog dark theme colors */
+        --aadish: 0 84% 72%;
+        --muted: 217.2 32.6% 17.5%;
+        --border: 217.2 32.6% 17.5%;
+      }
+    }
+    body { 
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; 
+      background: var(--bg); 
+      color: var(--fg); 
+      margin: 0; 
+      line-height: 1.6;
+      letter-spacing: -0.3px;
+    }
+    main { max-width: 48rem; margin: 0 auto; padding: 5rem 1.5rem; }
+    .markdown-content h1, .markdown-content h2, .markdown-content h3 { 
+      border-bottom: 1px solid var(--border); 
+      padding-bottom: 0.3em;
+      margin-top: 1.5em;
+    }
+    .markdown-content a { color: var(--link); text-decoration: none; }
+    .markdown-content a:hover { text-decoration: underline; }
+    .markdown-content p { margin: 1em 0; }
+    .markdown-content ul, .markdown-content ol { padding-left: 2em; }
+    .markdown-content li { margin: 0.25em 0; }
+    .markdown-content li input[type="checkbox"] {
+      margin: 0 0.2em 0.25em -1.6em;
+      vertical-align: middle;
+    }
+    .markdown-content ul li:has(input[type="checkbox"]) {
+      list-style-type: none;
+    }
+    pre { 
+      padding: 1rem; 
+      border-radius: 0.5rem; 
+      overflow: auto; 
+      background: hsl(var(--muted)) !important;
+      border: 1px solid hsl(var(--border));
+    }
+    /* Shiki dual themes support */
+    @media (prefers-color-scheme: dark) {
+      .shiki,
+      .shiki span {
+        color: var(--shiki-dark) !important;
+        background-color: transparent !important;
+        font-style: var(--shiki-dark-font-style) !important;
+        font-weight: var(--shiki-dark-font-weight) !important;
+        text-decoration: var(--shiki-dark-text-decoration) !important;
+      }
+    }
+    code { 
+      font-family: "Google Sans Code", ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+      font-size-adjust: 0.5;
+    }
+    p code {
+      color: hsl(var(--aadish));
+      padding: 0.2em 0.4em;
+    }
+    p code::before,
+    p code::after {
+      content: "\`";
+    }
+    pre code { background: none; padding: 0; }
+    .katex-display { margin: 1.5rem 0; overflow-x: auto; overflow-y: hidden; }
+    img { max-width: 100%; height: auto; border-radius: 8px; }
+    blockquote {
+      padding: 0 1em;
+      color: #656d76;
+      border-left: 0.25em solid var(--border);
+      margin: 0;
+    }
+    @media (prefers-color-scheme: dark) {
+      blockquote { color: #8b949e; }
+    }
+    .date-tag {
+      display: inline-block;
+      padding: 0.1em 0.4em;
+      margin-left: 0.25em;
+      font-size: 0.8em;
+      font-weight: 500;
+      border-radius: 0.25rem;
+      background: hsl(var(--muted));
+      color: var(--fg);
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <main><article id="content" class="markdown-content"></article></main>
+  <script>
+    async function update() {
+      try {
+        const res = await fetch('/content');
+        if (res.ok) {
+          document.getElementById('content').innerHTML = await res.text();
+        }
+      } catch (e) {
+        console.error('Update failed', e);
+      }
+    }
+    
+    function connect() {
+      const ws = new WebSocket('ws://' + location.host + '/ws');
+      ws.onopen = () => {
+        update();
+      };
+      ws.onmessage = update;
+      ws.onclose = () => {
+        setTimeout(connect, 500);
+      };
+      ws.onerror = () => {
+        ws.close();
+      };
+    }
+
+    update();
+    connect();
+  </script>
+</body>
+</html>`;
+          return new Response(template, { headers: { "Content-Type": "text/html" } });
+        }
+
+        if (url.pathname === "/content") {
+          try {
+            const md = fs.readFileSync(absPath, "utf-8");
+            return new Response(renderMarkdown(md), { headers: { "Content-Type": "text/html" } });
+          } catch (e) {
+            return new Response(e.stack, { status: 500 });
+          }
+        }
+
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: {
+        open(ws) { clients.add(ws); },
+        close(ws) { clients.delete(ws); },
+        message() {},
+      },
+    });
+    break;
+  } catch (e) {
+    if (e.code === "EADDRINUSE") {
+      port++;
+    } else {
+      throw e;
+    }
+  }
+}
+
+console.log(`Previewing ${absPath}`);
+console.log(`Server running at http://localhost:${port}`);
+
+fs.watch(absPath, () => {
+  for (const ws of clients) ws.send("reload");
+});

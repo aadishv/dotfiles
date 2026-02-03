@@ -1,0 +1,202 @@
+#!/usr/bin/env bun
+import { readdir, readFile } from "fs/promises";
+import { join } from "path";
+import { homedir } from "os";
+import {
+  TUI,
+  ProcessTerminal,
+  Text,
+  SelectList,
+  type SelectItem,
+  type SelectListTheme,
+  Key,
+  matchesKey,
+  truncateToWidth
+} from "@mariozechner/pi-tui";
+
+const SESSIONS_DIR = join(homedir(), ".pi/agent/sessions");
+
+interface Session {
+  name: string;
+  directory: string;
+  timestamp: Date;
+  file: string;
+}
+
+async function getSessions(dir: string): Promise<Session[]> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    let sessions: Session[] = [];
+
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        sessions = sessions.concat(await getSessions(fullPath));
+      } else if (entry.name.endsWith(".jsonl")) {
+        try {
+          const content = await readFile(fullPath, "utf-8");
+          const lines = content.split("\n").filter(l => l.trim());
+          if (lines.length === 0) continue;
+
+          const header = JSON.parse(lines[0]);
+          if (header.type !== "session") continue;
+
+          let name = "";
+          let firstUserMessage = "";
+
+          for (const line of lines) {
+            try {
+              const item = JSON.parse(line);
+              if (item.type === "session_info" && item.name) {
+                name = item.name;
+              }
+              if (!firstUserMessage && item.type === "message" && item.message?.role === "user") {
+                 const content = item.message.content;
+                 if (typeof content === "string") {
+                   firstUserMessage = content;
+                 } else if (Array.isArray(content)) {
+                   firstUserMessage = content.find((c: any) => c.type === "text")?.text || "";
+                 }
+              }
+            } catch (e) {}
+          }
+
+          sessions.push({
+            name: (name || firstUserMessage || "Unnamed Session").split("\n")[0],
+            directory: header.cwd,
+            timestamp: new Date(header.timestamp),
+            file: fullPath
+          });
+        } catch (e) {}
+      }
+    }
+    return sessions;
+  } catch (e) {
+    return [];
+  }
+}
+
+class FullWidthSelectList extends SelectList {
+  render(width: number): string[] {
+    // Override render to use the full width for the label
+    // The default implementation in pi-tui seems to cap label width at 30
+    const lines: string[] = [];
+    const filteredItems = (this as any).filteredItems as SelectItem[];
+    const selectedIndex = (this as any).selectedIndex as number;
+    const maxVisible = (this as any).maxVisible as number;
+    const theme = (this as any).theme as SelectListTheme;
+
+    if (filteredItems.length === 0) {
+      return [theme.noMatch("  No matching sessions")];
+    }
+
+    const startIndex = Math.max(0, Math.min(selectedIndex - Math.floor(maxVisible / 2), filteredItems.length - maxVisible));
+    const endIndex = Math.min(startIndex + maxVisible, filteredItems.length);
+
+    for (let i = startIndex; i < endIndex; i++) {
+      const item = filteredItems[i];
+      const isSelected = i === selectedIndex;
+      const timestamp = item.description || "";
+      const prefix = isSelected ? "→ " : "  ";
+      
+      // Calculate widths: prefix (2) + label (?) + spacing (1) + timestamp (approx 25)
+      const timestampWidth = timestamp.length;
+      const labelWidth = width - 3 - timestampWidth;
+      const truncatedLabel = truncateToWidth(item.label, labelWidth, "...");
+      const spacing = " ".repeat(Math.max(1, width - 2 - truncatedLabel.length - timestampWidth));
+      
+      let line = `${prefix}${truncatedLabel}${spacing}${theme.description(timestamp)}`;
+      if (isSelected) {
+        line = theme.selectedText(line);
+      }
+      lines.push(line);
+    }
+
+    if (startIndex > 0 || endIndex < filteredItems.length) {
+      lines.push(theme.scrollInfo(`  (${selectedIndex + 1}/${filteredItems.length})`));
+    }
+
+    return lines;
+  }
+}
+
+async function main() {
+  const allSessions = await getSessions(SESSIONS_DIR);
+  allSessions.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+  if (allSessions.length === 0) {
+    console.log("No sessions found.");
+    process.exit(0);
+  }
+
+  const terminal = new ProcessTerminal();
+  const tui = new TUI(terminal);
+
+  const theme: SelectListTheme = {
+    selectedPrefix: (text) => `\x1b[1;36m${text}\x1b[0m`,
+    selectedText: (text) => `\x1b[1;36m${text}\x1b[0m`,
+    description: (text) => `\x1b[90m${text}\x1b[0m`,
+    scrollInfo: (text) => `\x1b[90m${text}\x1b[0m`,
+    noMatch: (text) => `\x1b[31m${text}\x1b[0m`,
+  };
+
+  const items: SelectItem[] = allSessions.map(s => ({
+    value: s.file,
+    label: s.name,
+    description: s.timestamp.toLocaleString()
+  }));
+
+  const maxVisible = Math.max(5, terminal.rows - 10);
+  const list = new FullWidthSelectList(items, maxVisible, theme);
+
+  const header = new Text("\x1b[1;34mRecent Pi Sessions\x1b[0m\n(↑/↓ to navigate, Enter to select, Esc/q to quit)\n", 0, 1);
+  const detailText = new Text("", 0, 1);
+
+  const updateDetails = (item: SelectItem) => {
+    const s = allSessions.find(sess => sess.file === item.value);
+    if (s) {
+      detailText.setText(`\n\x1b[90mDirectory: ${s.directory}\x1b[0m\n\x1b[90mFile:      ${s.file}\x1b[0m`);
+    }
+  };
+
+  list.onSelectionChange = updateDetails;
+  list.onSelect = (item) => {
+    tui.stop();
+    const s = allSessions.find(sess => sess.file === item.value);
+    if (s) {
+      process.stdout.write("\x1bc");
+      console.log(`\x1b[1;34mSelected Session Details:\x1b[0m`);
+      console.log(`\x1b[1mName:\x1b[0m      ${s.name}`);
+      console.log(`\x1b[1mDirectory:\x1b[0m ${s.directory}`);
+      console.log(`\x1b[1mTimestamp:\x1b[0m ${s.timestamp.toLocaleString()}`);
+      console.log(`\x1b[1mFile:\x1b[0m      ${s.file}`);
+    }
+    process.exit(0);
+  };
+  list.onCancel = () => {
+    tui.stop();
+    process.stdout.write("\x1bc");
+    process.exit(0);
+  };
+
+  // Add custom keyboard shortcuts to the TUI
+  const originalHandleInput = tui.handleInput.bind(tui);
+  (tui as any).handleInput = (data: string) => {
+    if (matchesKey(data, "q") || matchesKey(data, Key.escape)) {
+      list.onCancel?.();
+      return;
+    }
+    // Forward everything else to focused component via original handler
+    originalHandleInput(data);
+  };
+
+  tui.addChild(header);
+  tui.addChild(list);
+  tui.addChild(detailText);
+  
+  tui.setFocus(list);
+  updateDetails(items[0]);
+  tui.start();
+}
+
+main();

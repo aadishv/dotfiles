@@ -1,4 +1,5 @@
-package.json
-tsconfig.json
-node_modules
-bun.lock
+node_modules/
+.DS_Store
+dist/
+.env*
+*.log

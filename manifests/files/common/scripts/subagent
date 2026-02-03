@@ -1,0 +1,504 @@
+#!/usr/bin/env bun
+import { ToolLoopAgent } from 'ai';
+import { openrouter } from '@openrouter/ai-sdk-provider';
+import { Bash, defineCommand, OverlayFs } from "just-bash";
+import { parse } from 'ts-command-line-args';
+import nodeFs from "fs";
+import nodePath from "path";
+import git from 'isomorphic-git';
+import http from 'isomorphic-git/http/node';
+import { z } from 'zod';
+import { tool } from 'ai';
+import { Markdown, type MarkdownTheme, TUI, ProcessTerminal, Container, matchesKey, Key, type Component, type Focusable } from "@mariozechner/pi-tui";
+import chalk from "chalk";
+import { highlight, supportsLanguage } from "cli-highlight";
+import dedent from 'dedent';
+import { $ } from "bun";
+
+class RootComponent extends Container implements Focusable {
+  focused: boolean = true;
+  constructor(private onExit: () => void) {
+    super();
+  }
+
+  handleInput(data: string): void {
+    if (matchesKey(data, Key.ctrl("c"))) {
+      this.onExit();
+    }
+  }
+}
+
+class MarkdownRenderer {
+  markdown: string;
+  private renderer: {
+    md: Markdown;
+    tui: TUI
+  } | undefined;
+
+  private constructor(theme: MarkdownTheme) {
+    this.markdown = "";
+    if (process.stdout.isTTY) {
+      const md = new Markdown(this.markdown, 0, 1, theme);
+      const root = new RootComponent(() => this.stop());
+      root.addChild(md);
+      const tui = new TUI(new ProcessTerminal());
+      tui.addChild(root);
+      tui.setFocus(root);
+      tui.start();
+      this.renderer = {
+        md,
+        tui
+      }
+    } else {
+      this.renderer = undefined;
+    }
+  }
+
+  static async new() {
+    const syntaxTheme = {
+      keyword: chalk.hex("#569CD6"),
+      built_in: chalk.hex("#4EC9B0"),
+      type: chalk.hex("#4EC9B0"),
+      literal: chalk.hex("#B5CEA8"),
+      number: chalk.hex("#B5CEA8"),
+      string: chalk.hex("#CE9178"),
+      comment: chalk.hex("#6A9955").italic,
+      function: chalk.hex("#DCDCAA"),
+      title: chalk.hex("#DCDCAA"),
+      variable: chalk.hex("#9CDCFE"),
+      params: chalk.hex("#9CDCFE"),
+      attr: chalk.hex("#9CDCFE"),
+      operator: chalk.hex("#D4D4D4"),
+      punctuation: chalk.hex("#D4D4D4"),
+    };
+    const theme: MarkdownTheme = {
+      heading: chalk.hex("#f0c674").bold,
+      bold: chalk.bold,
+      italic: chalk.italic,
+      strikethrough: chalk.strikethrough,
+      underline: chalk.underline,
+
+      link: chalk.hex("#81a2be").underline,
+      linkUrl: chalk.hex("#666666"),
+      listBullet: chalk.hex("#8abeb7"),
+
+      quote: chalk.hex("#808080").italic,
+      quoteBorder: chalk.hex("#808080"),
+      hr: (text) => chalk.hex("#808080")("─".repeat(20)), // Kept as arrow to handle repeat logic
+
+      code: chalk.hex("#8abeb7"),
+      codeBlock: chalk.hex("#b5bd68"),
+      codeBlockBorder: chalk.hex("#808080"),
+      codeBlockIndent: "  ",
+
+      highlightCode: (code, lang) => {
+        const validLang = lang && supportsLanguage(lang) ? lang : undefined;
+        try {
+          return highlight(code, {
+            language: validLang,
+            ignoreIllegals: true,
+            theme: syntaxTheme,
+          }).split("\n");
+        } catch {
+          const fallback = chalk.hex("#b5bd68");
+          return code.split("\n").map((line) => fallback(line));
+        }
+      },
+    };
+    return new MarkdownRenderer(theme);
+  }
+
+  renderChunk(chunk: string) {
+    this.markdown += chunk;
+    if (this.renderer) {
+      this.renderer.md.setText(this.markdown);
+      this.renderer.tui.requestRender();
+    } else {
+      process.stdout.write(chunk);
+    }
+  }
+
+  renderToolCall(tool: string, args: string) {
+    const formattedArgs = args.replace(/\n/g, " ").replace(/`/g, "\\`").trim();
+    if (this.markdown.length > 0 && this.markdown[this.markdown.length - 1] !== "\n") {
+      this.renderChunk("\n");
+    }
+    if (this.renderer) {
+      this.renderChunk(`**${tool}**(${formattedArgs ? `\`${formattedArgs}\`` : ""})\n`)
+    } else {
+      this.renderChunk(`${tool}(${formattedArgs})\n`);
+    }
+  }
+
+  isInteractive(): boolean {
+    return this.renderer ? true : false;
+  }
+
+  stop() {
+    if (!this.renderer) return;
+    process.nextTick(() => {
+      this.renderer?.tui.stop();
+      process.exit(0);
+    });
+  }
+}
+
+namespace Prompts {
+  export const bashToolSysPrompt = dedent`Run a bash command in the current sandbox.
+
+  Note that stdout or stderr outputs over 70 kb will be truncated.
+  `
+  export const sysPrompt = (repo: string | undefined, path: string | undefined) => dedent`
+  <role>
+  You are an efficient and smart code research agent. Your goal is to use your bash tool to answer the given questions. ${repo ? `You are currently operating in the codebase of the GitHub repo ${repo}.` : path ? `You are currently operating in the codebase at path ${path}.` : ""}.
+  </role>
+
+  <tone>
+  Keep your responses concise; you are answering a question for another LLM, not a human, so extra niceties are not needed. Directly answer the question. 
+
+  If the question pertains to how to achieve a certain task using a certain library, provide code examples.
+  </tone>
+
+  <sandbox>
+  You are running in a fully isolated sandbox, so do not hold back or refrain from running potentially dangerous bash commands. You also have full network access.
+
+  Initially, you will start by operating in an "overlay" sandbox. In this sandbox, commands that edit files will use a copy-on-write system to persist edits into memory. However, edits will not persist over sessions.
+  </sandbox>
+
+  <overlay-sandbox-details>
+  Available commands:
+
+  cat, cp, file, ln, ls, mkdir, mv, readlink, rm, split, stat, touch, tree, awk, base64, column, comm, cut, diff, expand, fold, grep, egrep, fgrep, head, join, md5sum, nl, od, paste, printf, rev, rg, sed, sha1sum, sha256sum, sort, strings, tac, tail, tr, unexpand, uniq, wc, xargs, jq, sqlite3, xan, yq, gzip, gunzip, zcat, tar, basename, cd, dirname, du, echo, env, export, find, hostname, printenv, pwd, tee, alias, bash, chmod, clear, date, expr, false, help, history, seq, sh, sleep, timeout, true, unalias, which, curl, html-to-markdown
+
+  All commands support --help for usage information.
+
+  Standard shell features such as pipes and redirections work.
+  </overlay-sandbox-details>
+
+  <upgrading-sandbox>
+  You have the ability to "escalate" your sandbox into a full Ubuntu VM in the cloud using the upgradeSandbox tool. This VM has the following features:
+  * It runs in a GitHub Codespace, so standard commands like python, gh, etc. will be preinstalled by default.
+  * There is a persistent filesystem; any edits you make in one session will be persisted across sessions and available to future yous.
+  * Edits made in the overlay sandbox will not carry over to the Ubuntu sandbox. ${repo ? "The repository will not be cloned by default (although it may already be cloned due to the work of other agents)." : path ? `The local path (${path}) will not be available in the codespace by default.` : ""}
+  * Other agents will be operating in this same VM, so be mindful. We recommend cloning relevant repos into a separate folder which you can work in independently.
+
+  Upgrade the sandbox sparingly, as you should rarely need to use it, and it is costly to run for extended periods of time. Furthermore, running bash commands in the sandbox take ~6-7 seconds just to connect to the codespace, making it unideal for simple tasks. If you want to install a tool, run a script, debug a failure case, etc., then you'll want to upgrade your sandbox.
+  </upgrading-sandbox> 
+
+  <research>
+  There may be cases where your prompt requires you to conduct "research" -- e.g., running web searches then fetching relevant pages to gain information. You can do this using the webSearch tool to surface relevant results given a query, then fetching them as markdown. When you're operating in an overlay sandbox, you can use the \`curl https://example.com | html-to-markdown\` pattern to fetch webpages as markdown. You can replicate this to a similar effect, if needed, in a codespace sandbox using a small Node.js script with fetch and turndown.
+  </research>
+  `;
+}
+
+namespace Exa {
+  interface McpSearchRequest {
+    jsonrpc: string
+    id: number
+    method: string
+    params: {
+      name: string
+      arguments: {
+        query: string
+        numResults?: number
+        livecrawl?: "fallback" | "preferred"
+        type?: "auto" | "fast" | "deep"
+        contextMaxCharacters?: number
+      }
+    }
+  }
+
+  interface McpSearchResponse {
+    jsonrpc: string
+    result: {
+      content: Array<{
+        type: string
+        text: string
+      }>
+    }
+  }
+
+  export async function searchWeb(query: string) {
+    const searchRequest: McpSearchRequest = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "web_search_exa",
+        arguments: {
+          query,
+          type: "auto",
+          numResults: 8,
+          livecrawl: "fallback",
+          contextMaxCharacters: 50000,
+        },
+      },
+    }
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 25000)
+
+    try {
+      const headers: Record<string, string> = {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      }
+
+      const response = await fetch(`https://mcp.exa.ai/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(searchRequest),
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Search error (${response.status}): ${errorText}`)
+      }
+
+      const responseText = await response.text()
+
+      // Parse SSE response
+      const lines = responseText.split("\n")
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const data: McpSearchResponse = JSON.parse(line.substring(6))
+            if (data.result && data.result.content && data.result.content.length > 0) {
+              return data.result.content[0].text
+            }
+          } catch (e) {
+            // Ignore parse errors for incomplete SSE data
+          }
+        }
+      }
+
+      return "No search results found. Please try a different query."
+    } catch (error) {
+      clearTimeout(timeoutId)
+
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("Search request timed out")
+      }
+
+      throw error
+    }
+  }
+}
+
+class Sandbox {
+  // lazily loaded
+  private repo: string | undefined;
+  private path: string | undefined;
+  private codespace: string | null = null;
+  private justBashEnv: Bash | null = null;
+  private environment: "just-bash" | "codespace" = "just-bash";
+  constructor(repo: string | undefined, path: string | undefined) {
+    this.repo = repo;
+    this.path = path;
+  }
+
+  private async getFs(): Promise<OverlayFs | undefined> {
+    if (this.repo) {
+      const repoPath = `/tmp/ask-repo/${this.repo}`;
+      if (!nodeFs.existsSync(repoPath)) {
+        await git.clone({
+          fs: nodeFs,
+          http,
+          dir: repoPath,
+          url: `https://github.com/${this.repo}.git`,
+          singleBranch: true,
+          depth: 1
+        });
+      } else {
+        // Pull to update the shallow clone
+        const branch = await git.currentBranch({ fs: nodeFs, dir: repoPath });
+        if (branch) {
+          await git.pull({
+            fs: nodeFs,
+            http,
+            dir: repoPath,
+            ref: branch,
+            author: { name: 'subagent', email: 'subagent@example.com' },
+            singleBranch: true,
+          });
+        }
+      }
+      return new OverlayFs({ root: repoPath })
+    }
+
+    if (this.path) {
+      return new OverlayFs({ root: nodePath.resolve(this.path) });
+    }
+
+    return undefined
+  }
+
+  async allocateCodespace(): Promise<string> {
+    try {
+      const existingRes = await $`gh codespace ls --json 'name' --jq '.[].name' | grep better-context-lite | head -1`.quiet();
+      const existing = existingRes.stdout.toString().trim();
+      if (!existing) {
+        const codespaceRes = await $`gh codespace create --default-permissions -R aadishv/scratchpad -d better-context-lite -m basicLinux32gb --idle-timeout 10m | tail -1`.quiet();
+        const codespace = codespaceRes.stdout.toString().trim();
+        if (!codespace) {
+          throw new Error(`Failed to run gh codespace create: ${codespaceRes.stderr.toString()}`);
+        }
+        this.codespace = codespace;
+        this.environment = "codespace";
+        return `Allocated codespace ${codespace}. Calls to the bash tool will now run in the codespace's Ubuntu VM.`
+      } else {
+        this.codespace = existing;
+        this.environment = "codespace";
+        return `Reallocating preexisting codespace ${existing}. Calls to the bash tool will now run in the codespace's Ubuntu VM.`
+      }
+    } catch (error) {
+      return `Codespace allocation failed: ${error}. The sandbox was not switched; future calls to the bash tool will still run in the overlay sandbox.`
+    }
+  }
+
+  async exec(command: string) {
+    if (this.environment == "codespace") {
+      if (!this.codespace) {
+        throw new Error("Codespace not allocated");
+      }
+
+      const encodedUserCommand = Buffer.from(command).toString("base64");
+
+      // This entire block is the logic that will run inside the codespace
+      const scriptToRun = `
+      OUT=$(mktemp); ERR=$(mktemp)
+      echo "${encodedUserCommand}" | base64 -d | bash >"$OUT" 2>"$ERR"
+      CODE=$?
+      jq -n --arg stdout "$(cat "$OUT")" --arg stderr "$(cat "$ERR")" --argjson exitCode $CODE '{stdout: $stdout, stderr: $stderr, exitCode: $exitCode}'
+      rm "$OUT" "$ERR"\
+      `.trim();
+
+      const encodedScript = Buffer.from(scriptToRun).toString("base64");
+
+      const res = await $`gh codespace ssh -c ${this.codespace} -- "echo ${encodedScript} | base64 -d | bash"`.quiet();
+      if (res.exitCode !== 0) {
+        throw new Error(`Failed to exec command in codespace: ${res.stderr.toString()}`);
+      }
+      const output = JSON.parse(res.stdout.toString());
+      if (output.stdout.length > 70000) {
+        output.stdout = "stdout too long (max limit 70 kb). We recommend redirecting output to a file then using operations like `grep`, `head`, or `jq` to get exactly what you need."
+      }
+      if (output.stderr.length > 70000) {
+        output.stderr = "stderr too long (max limit 70 kb). We recommend redirecting output to a file then using operations like `grep`, `head`, or `jq` to get exactly what you need."
+      }
+      return { stdout: output.stdout, stderr: output.stderr, exitCode: output.exitCode };
+    }
+    if (this.environment == "just-bash") {
+      if (!this.justBashEnv) {
+        const fs = await this.getFs();
+        this.justBashEnv = new Bash({ fs, cwd: fs?.getMountPoint(), network: { dangerouslyAllowFullInternetAccess: true }, });
+      }
+      const result = await this.justBashEnv.exec(command);
+      if (result.stdout.length > 70000) {
+        result.stdout = "stdout too long (max limit 70 kb). We recommend redirecting output to a file then using operations like `grep`, `head`, or `jq` to get exactly what you need."
+      }
+      if (result.stderr.length > 70000) {
+        result.stderr = "stderr too long (max limit 70 kb). We recommend redirecting output to a file then using operations like `grep`, `head`, or `jq` to get exactly what you need."
+      }
+      return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+    }
+  }
+}
+
+interface Args {
+  repo?: string;
+  path?: string;
+  prompt: string[];
+  help?: boolean;
+}
+
+const args = parse<Args>({
+  repo: { type: String, optional: true, description: "GitHub repository (e.g., 'owner/repo')" },
+  path: { type: String, optional: true, description: "Local directory path" },
+  prompt: { type: String, multiple: true, description: "Research prompt or question", defaultOption: true },
+  help: { type: Boolean, optional: true, alias: 'h', description: "Prints this usage guide" },
+}, {
+  helpArg: 'help',
+  headerContentSections: [{ header: 'Subagent', content: 'A research agent for deep technical investigation and repository analysis.' }],
+});
+
+if (args.repo && args.path) {
+  console.error("Error: Cannot specify both --repo and --path");
+  process.exit(1);
+}
+
+const { repo, path } = args;
+const prompt = args.prompt.join(' ');
+
+const renderer = await MarkdownRenderer.new();
+
+const sandbox = new Sandbox(repo, path);
+
+const bash = tool({
+  description: Prompts.bashToolSysPrompt,
+  inputSchema: z.object({
+    command: z.string().describe('The bash command to run.'),
+  }),
+  execute: async ({ command }) => {
+    renderer.renderToolCall("Bash", command);
+    return await sandbox.exec(command);
+  },
+});
+
+const upgradeSandbox = tool({
+  description: "Upgrade the current sandbox into a full Ubuntu VM in the cloud using GitHub Codespaces.",
+  inputSchema: z.object({
+    reason: z.string().describe("The reason for upgrading the sandbox.")
+  }),
+  execute: async ({ reason }) => {
+    const result = await sandbox.allocateCodespace();
+    renderer.renderToolCall("UpgradeSandbox", reason);
+    return { message: result };
+  }
+});
+
+const webSearch = tool({
+  description: "Search the web.",
+  inputSchema: z.object({
+    query: z.string(),
+  }),
+  execute: async (args) => {
+    renderer.renderToolCall("WebSearch", args.query);
+    return await Exa.searchWeb(args.query);
+  }
+})
+
+const totalUsage = { inputTokens: 0, outputTokens: 0 };
+
+const agent = new ToolLoopAgent({
+  model: openrouter('x-ai/grok-code-fast-1'),
+  instructions: Prompts.sysPrompt(repo, path),
+  tools: {
+    bash,
+    upgradeSandbox,
+    webSearch
+  },
+  onStepFinish: ({ usage }) => {
+    totalUsage.inputTokens += usage.inputTokens ?? 0;
+    totalUsage.outputTokens += usage.outputTokens ?? 0;
+  }
+});
+
+const stream = await agent.stream({
+  prompt
+});
+
+for await (const chunk of stream.textStream) {
+  renderer.renderChunk(chunk);
+}
+
+const cost = (totalUsage.inputTokens * 0.20 + totalUsage.outputTokens * 1.50) / 1000000;
+
+// if (renderer.isInteractive()) {
+  renderer.renderChunk(`\n\n[total cost $${cost.toFixed(6)}]`);
+// }
+
+renderer.stop();

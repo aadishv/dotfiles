@@ -1,7 +1,19 @@
 {
-  "lastChangelogVersion": "0.49.0",
-  "defaultProvider": "google-antigravity",
-  "defaultModel": "gemini-3-flash",
+  "lastChangelogVersion": "0.51.3",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-sonnet-4-5",
   "defaultThinkingLevel": "high",
-  "hideThinkingBlock": false
+  "hideThinkingBlock": false,
+  "shellPath": "/bin/zsh",
+  "shellCommandPrefix": "eval \"$(grep '^alias ' ~/.zshrc)\"",
+  "compaction": {
+    "enabled": false
+  },
+  "packages": [
+    "npm:@marckrenn/pi-sub-core",
+    "npm:@marckrenn/pi-sub-bar"
+  ],
+  "extensions": [
+    "+extensions/user-as-tool.ts"
+  ]
 }

@@ -4,6 +4,14 @@ actions:
     to: "{{ user.home_dir }}/.tmux.conf"
 
   - action: file.link
+    from: common/.gitconfig
+    to: "{{ user.home_dir }}/.gitconfig"
+
+  - action: file.link
+    from: common/.config/nvim/init.lua
+    to: "{{ user.home_dir }}/.config/nvim/init.lua"
+
+  - action: file.link
     from: common/.config/starship.toml
     to: "{{ user.home_dir }}/.config/starship.toml"
 

@@ -1,5 +1,9 @@
 actions:
   - action: file.link
+    from: common/.tmux.conf
+    to: "{{ user.home_dir }}/.tmux.conf"
+
+  - action: file.link
     from: common/.config/starship.toml
     to: "{{ user.home_dir }}/.config/starship.toml"
 

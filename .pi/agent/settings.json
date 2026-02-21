@@ -1,7 +1,26 @@
 {
-  "lastChangelogVersion": "0.49.0",
-  "defaultProvider": "github-copilot",
-  "defaultModel": "gpt-5.2-codex",
-  "defaultThinkingLevel": "xhigh",
-  "hideThinkingBlock": false
+  "lastChangelogVersion": "0.54.0",
+  "defaultProvider": "google-antigravity",
+  "defaultModel": "gemini-3-flash",
+  "defaultThinkingLevel": "high",
+  "hideThinkingBlock": false,
+  "shellPath": "/bin/zsh",
+  "shellCommandPrefix": "eval \"$(grep '^alias ' ~/.zshrc)\"",
+  "compaction": {
+    "enabled": false
+  },
+  "packages": [
+    {
+      "source": "npm:@marckrenn/pi-sub-bar",
+      "extensions": [
+        "+index.ts"
+      ]
+    },
+    "npm:pi-notify"
+  ],
+  "extensions": [
+    "-extensions/claude-style.ts",
+    "-extensions/user-as-tool.ts",
+    "+extensions/fps-counter.ts"
+  ]
 }
